@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Share+Tech+Mono&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:280px; background:transparent; overflow:hidden; -webkit-app-region:drag; user-select:none; font-family:'Share Tech Mono',monospace; }
+    #vw { width:280px; background:rgba(0,8,20,0.93); border:1px solid rgba(0,212,255,0.3); border-radius:4px; overflow:hidden; box-shadow:0 0 25px rgba(0,150,255,0.18); }
+    #vh { padding:6px 10px; border-bottom:1px solid rgba(0,212,255,0.2); display:flex; align-items:center; justify-content:space-between; background:rgba(0,20,40,0.8); }
+    #vt { font-family:'Orbitron',monospace; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(0,212,255,0.8); }
+    #si { font-size:7px; letter-spacing:1px; color:rgba(0,255,180,0.6); display:flex; align-items:center; gap:4px; }
+    .sd { width:5px; height:5px; border-radius:50%; background:#00ffcc; box-shadow:0 0 5px #00ffcc; animation:blink 1.5s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+    #cc { position:relative; width:280px; height:180px; overflow:hidden; background:#000; }
+    video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+    #co { position:absolute; inset:0; pointer-events:none; }
+    #co::after { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px); }
+    .vc { position:absolute; width:12px; height:12px; }
+    .vc.tl{top:5px;left:5px;border-top:1.5px solid rgba(0,212,255,0.7);border-left:1.5px solid rgba(0,212,255,0.7);}
+    .vc.tr{top:5px;right:5px;border-top:1.5px solid rgba(0,212,255,0.7);border-right:1.5px solid rgba(0,212,255,0.7);}
+    .vc.bl{bottom:5px;left:5px;border-bottom:1.5px solid rgba(0,212,255,0.7);border-left:1.5px solid rgba(0,212,255,0.7);}
+    .vc.br{bottom:5px;right:5px;border-bottom:1.5px solid rgba(0,212,255,0.7);border-right:1.5px solid rgba(0,212,255,0.7);}
+    #sl { position:absolute; left:0; right:0; height:1.5px; background:linear-gradient(90deg,transparent,rgba(0,255,200,0.5),transparent); animation:scan 3s linear infinite; }
+    @keyframes scan { from{top:0;} to{top:180px;} }
+    #ao { position:absolute; inset:0; background:rgba(0,20,40,0.55); display:none; align-items:center; justify-content:center; flex-direction:column; gap:8px; }
+    #ao.on { display:flex; }
+    .sp { width:26px; height:26px; border:2px solid rgba(0,212,255,0.15); border-top-color:#00d4ff; border-radius:50%; animation:spin 0.7s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg);} }
+    .at { font-size:8px; letter-spacing:2px; color:rgba(0,212,255,0.8); animation:blink 0.5s step-end infinite; }
+    #rp { padding:7px 10px; border-top:1px solid rgba(0,212,255,0.12); }
+    .rr { display:flex; align-items:flex-start; gap:6px; margin-bottom:4px; }
+    .rl { font-size:7px; letter-spacing:1.5px; color:rgba(0,150,200,0.55); min-width:52px; padding-top:1px; text-transform:uppercase; }
+    .rv { font-size:9px; line-height:1.45; color:rgba(0,210,255,0.85); flex:1; }
+    .rv.empty { color:rgba(0,150,180,0.35); font-style:italic; }
+    .tags { display:flex; flex-wrap:wrap; gap:3px; }
+    .tag { background:rgba(0,180,255,0.08); border:1px solid rgba(0,180,255,0.22); border-radius:2px; padding:1px 5px; font-size:8px; color:rgba(0,200,255,0.8); }
+    .tag.hi { border-color:rgba(0,255,200,0.4); color:rgba(0,255,200,0.9); }
+    #sl2 { font-size:6.5px; letter-spacing:1px; color:rgba(0,150,180,0.35); text-align:center; padding:3px 0; }
+  </style>
+</head>
+<body>
+<div id="vw">
+  <div id="vh">
+    <div id="vt">⬡ VISION SYSTEM</div>
+    <div id="si"><div class="sd"></div><span id="ss">INIT</span></div>
+  </div>
+  <div id="cc">
+    <video id="vid" autoplay playsinline muted></video>
+    <div id="co">
+      <div class="vc tl"></div><div class="vc tr"></div>
+      <div class="vc bl"></div><div class="vc br"></div>
+      <div id="sl"></div>
+    </div>
+    <div id="ao"><div class="sp"></div><div class="at">ANALYZING...</div></div>
+  </div>
+  <div id="rp">
+    <div class="rr"><div class="rl">SCENE</div><div class="rv empty" id="rs">Awaiting scan...</div></div>
+    <div class="rr"><div class="rl">PERSONS</div><div class="rv empty" id="rp2">—</div></div>
+    <div class="rr" id="tr"  style="display:none"><div class="rl">TEXT</div><div class="rv" id="rt"></div></div>
+    <div class="rr" id="tr2" style="display:none"><div class="rl">MIRRORED</div><div class="rv" id="rt2"></div></div>
+  </div>
+  <div id="sl2">APPLE VISION · ON-DEVICE · NO API</div>
+</div>
+<script>
+  const { ipcRenderer } = require('electron');
+  const { exec } = require('child_process');
+  const fs   = require('fs');
+  const os   = require('os');
+  const path = require('path');
+
+  const vid = document.getElementById('vid');
+  const ss  = document.getElementById('ss');
+  const rs  = document.getElementById('rs');
+  const rp2 = document.getElementById('rp2');
+  const rt  = document.getElementById('rt');
+  const rt2 = document.getElementById('rt2');
+  const tr  = document.getElementById('tr');
+  const tr2 = document.getElementById('tr2');
+  const ao  = document.getElementById('ao');
+
+  const FRAME  = path.join(os.tmpdir(), 'jarvis_vision_frame.jpg');
+  const SCRIPT = path.join(__dirname, 'vision_analyze.py');
+  let analyzing = false;
+
+  async function startCam() {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        video:{width:640,height:480,facingMode:'user'}, audio:false
+      });
+      vid.srcObject = s;
+      ss.textContent = 'ACTIVE';
+      rs.textContent = 'Camera ready. Say "what do you see" or click analyze.';
+      rs.className = 'rv';
+    } catch(e) {
+      ss.textContent = 'ERROR';
+      rs.textContent = 'Camera denied. Allow in System Prefs → Privacy → Camera.';
+      rs.className = 'rv';
+    }
+  }
+
+  function captureToFile(cb) {
+    const c = document.createElement('canvas');
+    c.width  = vid.videoWidth  || 640;
+    c.height = vid.videoHeight || 480;
+    const ctx = c.getContext('2d');
+    // Draw ORIGINAL (not mirrored) — Python will handle flipping for text
+    ctx.drawImage(vid, 0, 0, c.width, c.height);
+    c.toBlob(blob => {
+      const r = new FileReader();
+      r.onload = () => { fs.writeFile(FRAME, Buffer.from(r.result), err => cb(err?null:FRAME)); };
+      r.readAsArrayBuffer(blob);
+    }, 'image/jpeg', 0.88);
+  }
+
+  function analyzeFrame() {
+    if (analyzing || !vid.srcObject) return;
+    analyzing = true;
+    ao.classList.add('on');
+    rs.textContent = 'Scanning...'; rs.className = 'rv';
+
+    captureToFile(fp => {
+      if (!fp) { ao.classList.remove('on'); analyzing=false; rs.textContent='Capture failed.'; return; }
+
+      exec(`python3 "${SCRIPT}" "${fp}"`, {timeout:20000}, (err, stdout) => {
+        ao.classList.remove('on'); analyzing = false;
+
+        const lines = (stdout||'').trim().split('\n');
+        const jsonLine = lines.filter(l=>l.trim().startsWith('{')).pop()||'';
+        let data = {};
+        try { data = JSON.parse(jsonLine); }
+        catch(e) {
+          rs.textContent = 'Install required: pip3 install pyobjc-framework-Vision pyobjc-framework-Quartz Pillow --break-system-packages';
+          rs.className = 'rv'; return;
+        }
+
+        if (data.error === 'pyobjc_missing') {
+          rs.textContent = 'Run: pip3 install pyobjc-framework-Vision pyobjc-framework-Quartz Pillow --break-system-packages';
+          ipcRenderer.send('vision-result', 'Vision framework not installed.');
+          return;
+        }
+
+        const faces  = data.faces  || 0;
+        const humans = data.humans || 0;
+        const texts  = data.text   || [];
+        const textsF = data.text_flipped || [];
+        const clsAll = (data.classifications||[]).filter(c=>c.confidence>0.1);
+        const clsTop = clsAll
+          .filter(c=>!['no person','abstract','pattern','undefined'].includes(c.label))
+          .slice(0,7);
+
+        // Persons
+        const pc = Math.max(faces, humans);
+        rp2.className = pc>0 ? 'rv' : 'rv empty';
+        rp2.textContent = pc===0 ? 'None detected' : pc===1 ? '1 person' : `${pc} people`;
+
+        // Scene tags
+        rs.innerHTML = ''; rs.className = 'rv';
+        if (clsTop.length > 0) {
+          const tw = document.createElement('div'); tw.className = 'tags';
+          clsTop.forEach(t => {
+            const tg = document.createElement('span');
+            tg.className = t.confidence>0.4 ? 'tag hi' : 'tag';
+            tg.textContent = t.label;
+            tw.appendChild(tg);
+          });
+          rs.appendChild(tw);
+        } else {
+          rs.textContent = 'No scene data'; rs.className = 'rv empty';
+        }
+
+        // Text (original orientation — already mirrored by webcam = real world)
+        if (texts.length > 0) {
+          tr.style.display = 'flex';
+          rt.textContent = texts.slice(0,4).join(' · ');
+        } else { tr.style.display = 'none'; }
+
+        // Flipped text (corrected from mirrored webcam)
+        if (textsF.length > 0) {
+          tr2.style.display = 'flex';
+          rt2.textContent = textsF.slice(0,4).join(' · ');
+        } else { tr2.style.display = 'none'; }
+
+        // Spoken summary
+        const parts = [];
+        if (pc===1)    parts.push('I can see one person');
+        else if(pc>1)  parts.push(`I can see ${pc} people`);
+        else           parts.push('I see the area in front of the camera');
+
+        const topL = clsTop.slice(0,3).map(c=>c.label);
+        if (topL.length) parts.push(`with ${topL.join(', ')} detected`);
+
+        // Combine all readable text
+        const allText = [...new Set([...texts, ...textsF])];
+        if (allText.length) parts.push(`I can read: ${allText.slice(0,3).join(', ')}`);
+
+        ipcRenderer.send('vision-result', parts.join('. ')+'.');
+      });
+    });
+  }
+
+  ipcRenderer.on('analyze-now', ()=>analyzeFrame());
+  startCam().then(()=>{ setTimeout(analyzeFrame, 2000); });
+</script>
+</body>
+</html>
