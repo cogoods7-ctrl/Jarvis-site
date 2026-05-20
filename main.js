@@ -26,7 +26,13 @@ function log(m) {
 }
 
 if (!app.requestSingleInstanceLock()) { app.exit(0); }
-app.on('window-all-closed', e => e.preventDefault());
+// Only prevent quit when orb is still open — vision window should close freely
+app.on('window-all-closed', e => {
+  // If orb is still alive, keep app running
+  if (orbWin && !orbWin.isDestroyed()) {
+    e.preventDefault();
+  }
+});
 app.dock?.hide();
 
 // ── State ──
@@ -620,15 +626,7 @@ function handle(rawText) {
     selfDestruct(); return true;
   }
 
-  // ── Quit app ──
-  const quitM = cmd.match(/^(?:quit|close|kill|exit|shut down|force quit)\s+(.+)/);
-  if (quitM) {
-    const appRaw  = quitM[1].replace(/[.!?]$/, '').trim();
-    const appName = resolveApp(appRaw);
-    speak(`Closing ${appName}, ${userName}.`);
-    setTimeout(() => quitApp(appName), 500);
-    return true;
-  }
+  // ── Vision open/close — MUST come before quit app ──
   if (has(cmd, ['what do you see','what can you see','open camera','open vision','activate vision','use vision','show camera'])) {
     if (!visionOpen) {
       openVision();
@@ -642,6 +640,20 @@ function handle(rawText) {
   }
   if (has(cmd, ['close camera','close vision','stop camera','hide camera','shut camera','turn off camera','shut vision','close the camera','hide vision'])) {
     closeVision(); speak(`Vision closed, ${userName}.`); return true;
+  }
+
+  // ── Quit app — excluded camera/vision so they don't get caught here ──
+  const quitM = cmd.match(/^(?:quit|close|kill|exit|shut down|force quit)\s+(.+)/);
+  if (quitM) {
+    const appRaw = quitM[1].replace(/[.!?]$/, '').trim();
+    // Don't let quit-app catch vision/camera commands
+    if (['camera','vision','the camera','the vision'].includes(appRaw)) {
+      closeVision(); speak(`Vision closed, ${userName}.`); return true;
+    }
+    const appName = resolveApp(appRaw);
+    speak(`Closing ${appName}, ${userName}.`);
+    setTimeout(() => quitApp(appName), 500);
+    return true;
   }
 
   // ── Sleep ──
@@ -917,34 +929,35 @@ function handle(rawText) {
 // ─────────────────────────────────────────────
 //  VISION WINDOW
 // ─────────────────────────────────────────────
+function closeVision() {
+  visionOpen = false;
+  if (!visionWin || visionWin.isDestroyed()) return;
+  try { visionWin.hide(); } catch(e) { log('vision hide err: '+e.message); }
+}
+
 function openVision() {
-  if (visionWin && !visionWin.isDestroyed()) { visionWin.focus(); return; }
+  // If window exists, just show it again
+  if (visionWin && !visionWin.isDestroyed()) {
+    visionWin.show();
+    visionOpen = true;
+    try { visionWin.webContents.send('analyze-now'); } catch(e) {}
+    return;
+  }
   const ob = orbWin.getBounds();
   visionWin = new BrowserWindow({
-    width:280, height:320,
+    width:280, height:340,
     x: ob.x - 30, y: ob.y + ob.height + 8,
-    frame:false, transparent:true, alwaysOnTop:true,
+    frame:false, transparent:true,
+    alwaysOnTop:true, show:true,
     resizable:false, skipTaskbar:true, hasShadow:false,
     webPreferences: { nodeIntegration:true, contextIsolation:false, backgroundThrottling:false },
   });
   visionWin.webContents.session.setPermissionRequestHandler((_, p, cb) => cb(['media','camera','video'].includes(p)));
   visionWin.webContents.session.setPermissionCheckHandler((_, p) => ['media','camera','video'].includes(p));
   visionWin.loadFile(path.join(__dirname, 'vision.html'));
-  visionWin.setAlwaysOnTop(true, 'screen-saver');
+  visionWin.setAlwaysOnTop(true, 'floating');
   visionWin.on('closed', () => { visionWin = null; visionOpen = false; });
-  visionWin.on('close', e => {
-    // Allow vision window to close freely — unlike orb which we prevent
-    visionOpen = false;
-  });
   visionOpen = true;
-}
-
-function closeVision() {
-  visionOpen = false;
-  if (visionWin && !visionWin.isDestroyed()) {
-    try { visionWin.destroy(); } catch(e) { log('closeVision err: '+e.message); }
-    visionWin = null;
-  }
 }
 
 // ─────────────────────────────────────────────
@@ -1027,7 +1040,10 @@ function createOrb() {
   });
   orbWin.setAlwaysOnTop(true, 'screen-saver');
   orbWin.loadFile(path.join(__dirname, 'orb.html'));
-  orbWin.on('close', e => { if (!isQuitting) e.preventDefault(); });
+  // Only prevent ORB from closing — not all windows
+  orbWin.on('close', e => {
+    if (!isQuitting) e.preventDefault();
+  });
   orbWin.webContents.session.setPermissionRequestHandler((_, p, cb) => cb(['media','microphone','audioCapture','camera'].includes(p)));
 }
 
