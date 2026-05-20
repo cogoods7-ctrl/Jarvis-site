@@ -640,7 +640,7 @@ function handle(rawText) {
     }
     return true;
   }
-  if (has(cmd, ['close camera','close vision','stop camera'])) {
+  if (has(cmd, ['close camera','close vision','stop camera','hide camera','shut camera','turn off camera','shut vision','close the camera','hide vision'])) {
     closeVision(); speak(`Vision closed, ${userName}.`); return true;
   }
 
@@ -932,12 +932,19 @@ function openVision() {
   visionWin.loadFile(path.join(__dirname, 'vision.html'));
   visionWin.setAlwaysOnTop(true, 'screen-saver');
   visionWin.on('closed', () => { visionWin = null; visionOpen = false; });
+  visionWin.on('close', e => {
+    // Allow vision window to close freely — unlike orb which we prevent
+    visionOpen = false;
+  });
   visionOpen = true;
 }
 
 function closeVision() {
-  if (visionWin && !visionWin.isDestroyed()) visionWin.close();
   visionOpen = false;
+  if (visionWin && !visionWin.isDestroyed()) {
+    try { visionWin.destroy(); } catch(e) { log('closeVision err: '+e.message); }
+    visionWin = null;
+  }
 }
 
 // ─────────────────────────────────────────────
