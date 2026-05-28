@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width: 120px; height: 120px;
+    background: transparent;
+    overflow: visible;
+    -webkit-app-region: drag;
+    user-select: none;
+  }
+  #wrap {
+    width: 120px; height: 120px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  svg {
+    position: absolute;
+    width: 120px; height: 120px;
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+    overflow: visible;
+  }
+
+  /* Rings only rotate when speaking (fast) or awake (very slow) */
+  .rcw  { transform-origin: 60px 60px; }
+  .rccw { transform-origin: 60px 60px; }
+
+  body.speaking .rcw  { animation: cw  1.8s linear infinite; }
+  body.speaking .rccw { animation: ccw 2.6s linear infinite; }
+  body.awake    .rcw  { animation: cw  16s  linear infinite; }
+  body.awake    .rccw { animation: ccw 22s  linear infinite; }
+  body.listening .rcw  { animation: cw  5s  linear infinite; }
+  body.listening .rccw { animation: ccw 7s  linear infinite; }
+
+  @keyframes cw  { to { transform: rotate(360deg);  } }
+  @keyframes ccw { to { transform: rotate(-360deg); } }
+
+  /* Segments flash only on speak */
+  .seg { opacity: 0.2; }
+  body.speaking .seg { animation: sf 0.3s step-end infinite; }
+  .seg:nth-child(even) { animation-delay: 0.15s !important; }
+  @keyframes sf { 0%,100%{opacity:0.85;} 50%{opacity:0.08;} }
+
+  /* Gold arc glows on speak */
+  .garc { opacity: 0.75; transition: opacity 0.3s; }
+  body.speaking .garc { animation: gp 0.5s ease-in-out infinite alternate; filter: drop-shadow(0 0 3px #ffaa00); }
+  @keyframes gp { from{opacity:0.55;} to{opacity:1;} }
+
+  /* Core pulses */
+  body.awake    #core { animation: cb 2.5s ease-in-out infinite; }
+  body.speaking #core { animation: cs 0.4s ease-in-out infinite alternate; }
+  body.listening #core { animation: cb 1s ease-in-out infinite; }
+  @keyframes cb { 0%,100%{r:18px;} 50%{r:21px;} }
+  @keyframes cs { from{r:16px;} to{r:22px;} }
+
+  /* Dot markers pop on speak */
+  .dot { opacity: 0.35; transition: opacity 0.3s; }
+  body.speaking .dot { animation: dp 0.55s ease-in-out infinite alternate; }
+  @keyframes dp { from{r:1.2px;opacity:0.35;} to{r:2.2px;opacity:1;} }
+
+  /* Outer atmosphere glow — state-based */
+  #atmo { transition: opacity 0.5s; opacity: 0; }
+  body.awake    #atmo { opacity: 0.5; }
+  body.speaking #atmo { opacity: 1; animation: ag 0.45s ease-in-out infinite alternate; }
+  body.listening #atmo { opacity: 0.7; }
+  @keyframes ag { from{r:56px;} to{r:60px;} }
+</style>
+</head>
+<body class="standby">
+<div id="wrap">
+<svg viewBox="0 0 120 120" onclick="orbClicked()" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+    <stop offset="0%"  stop-color="#0d2535"/>
+    <stop offset="60%" stop-color="#061420"/>
+    <stop offset="100%" stop-color="#020b12"/>
+  </radialGradient>
+  <radialGradient id="cg" cx="40%" cy="36%" r="60%">
+    <stop offset="0%"   stop-color="#ccf4ff" id="cs0"/>
+    <stop offset="28%"  stop-color="#00bbdd" id="cs1"/>
+    <stop offset="65%"  stop-color="#004466"/>
+    <stop offset="100%" stop-color="#001018"/>
+  </radialGradient>
+  <radialGradient id="gr" cx="50%" cy="50%" r="50%">
+    <stop offset="0%"   stop-color="#00eeff" stop-opacity="0.55"/>
+    <stop offset="100%" stop-color="#00eeff" stop-opacity="0"/>
+  </radialGradient>
+  <!-- State-colored atmosphere -->
+  <radialGradient id="atmoG" cx="50%" cy="50%" r="50%">
+    <stop offset="60%"  stop-color="#00aacc" stop-opacity="0" id="atmoIn"/>
+    <stop offset="100%" stop-color="#00aacc" stop-opacity="0.18" id="atmoOut"/>
+  </radialGradient>
+  <filter id="gl"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="sgl"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+
+<!-- Atmosphere glow -->
+<circle id="atmo" cx="60" cy="60" r="57" fill="url(#atmoG)"/>
+
+<!-- Base -->
+<circle cx="60" cy="60" r="55" fill="url(#bg)"/>
+
+<!-- Outer border -->
+<circle cx="60" cy="60" r="54" fill="none" stroke="#1a8faa" stroke-width="1.2" opacity="0.9"/>
+<circle cx="60" cy="60" r="51" fill="none" stroke="#0a3d4d" stroke-width="0.5" opacity="0.5"/>
+
+<!-- Tick marks -->
+<g id="ticks"/>
+
+<!-- Rotating outer dashed ring -->
+<g class="rcw">
+  <circle cx="60" cy="60" r="47" fill="none" stroke="#1066aa" stroke-width="0.8" stroke-dasharray="4 6" opacity="0.5"/>
+</g>
+
+<!-- Middle solid ring -->
+<circle cx="60" cy="60" r="42" fill="none" stroke="#0c6677" stroke-width="1.5" opacity="0.85"/>
+
+<!-- Segment bars -->
+<g id="segs"/>
+
+<!-- Inner rotating dashed ring -->
+<g class="rccw">
+  <circle cx="60" cy="60" r="36" fill="none" stroke="#0d7788" stroke-width="1" stroke-dasharray="6 3 1 3" opacity="0.65"/>
+</g>
+
+<!-- Gold arc top-left -->
+<g class="garc">
+  <path d="M 27,31 A 36,36 0 0,1 60,24" fill="none" stroke="#ffaa00" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="30" cy="33" r="1.8" fill="#ffcc44"/>
+  <circle cx="40" cy="26" r="1.2" fill="#ffcc44" opacity="0.8"/>
+  <circle cx="51" cy="24" r="1.2" fill="#ffcc44" opacity="0.7"/>
+</g>
+
+<!-- Small counter arc bottom-right -->
+<g class="garc" style="opacity:0.35">
+  <path d="M 93,89 A 36,36 0 0,1 60,96" fill="none" stroke="#ffaa00" stroke-width="1.2" stroke-linecap="round"/>
+</g>
+
+<!-- Inner dark fill -->
+<circle cx="60" cy="60" r="30" fill="#030d16"/>
+<circle cx="60" cy="60" r="29" fill="none" stroke="#0a3040" stroke-width="0.8"/>
+
+<!-- Dot markers -->
+<g id="dots"/>
+
+<!-- Core sphere -->
+<circle id="core" cx="60" cy="60" r="18" fill="url(#cg)"/>
+
+<!-- Core glow -->
+<circle cx="60" cy="60" r="11" fill="url(#gr)" filter="url(#sgl)"/>
+
+<!-- Glass shine -->
+<ellipse cx="55" cy="54" rx="7" ry="4.5" fill="rgba(255,255,255,0.22)" transform="rotate(-18,55,54)"/>
+
+<!-- Arc reactor center -->
+<circle cx="60" cy="60" r="3.5" fill="white" opacity="0.88" filter="url(#gl)"/>
+<circle cx="60" cy="60" r="2"   fill="#aaffee" filter="url(#gl)"/>
+
+</svg>
+</div>
+<script>
+const { ipcRenderer } = require('electron');
+
+// Tick marks
+const tg = document.getElementById('ticks');
+for (let i = 0; i < 60; i++) {
+  const a = (i/60)*360, rad = (a-90)*Math.PI/180;
+  const maj = i%5===0, med = i%5===2||i%5===3;
+  const outerR = 54, innerR = maj ? 49 : med ? 51 : 52;
+  const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+  l.setAttribute('x1', 60+Math.cos(rad)*outerR); l.setAttribute('y1', 60+Math.sin(rad)*outerR);
+  l.setAttribute('x2', 60+Math.cos(rad)*innerR); l.setAttribute('y2', 60+Math.sin(rad)*innerR);
+  l.setAttribute('stroke', maj ? '#22aacc' : '#0a4050');
+  l.setAttribute('stroke-width', maj ? '1.2' : '0.6');
+  l.setAttribute('opacity', maj ? '1' : '0.45');
+  tg.appendChild(l);
+}
+
+// Segment bars
+const sg = document.getElementById('segs');
+for (let i = 0; i < 20; i++) {
+  const a = (i/20)*360-90, rad = a*Math.PI/180;
+  const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+  l.setAttribute('x1', 60+Math.cos(rad)*37); l.setAttribute('y1', 60+Math.sin(rad)*37);
+  l.setAttribute('x2', 60+Math.cos(rad)*42); l.setAttribute('y2', 60+Math.sin(rad)*42);
+  l.setAttribute('stroke','#00ccee'); l.setAttribute('stroke-width','2');
+  l.classList.add('seg'); sg.appendChild(l);
+}
+
+// Dot markers
+const dg = document.getElementById('dots');
+[0,45,90,135,180,225,270,315].forEach(deg => {
+  const rad = (deg-90)*Math.PI/180;
+  const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c.setAttribute('cx', 60+Math.cos(rad)*29); c.setAttribute('cy', 60+Math.sin(rad)*29);
+  c.setAttribute('r','1.5'); c.setAttribute('fill','#00ccee');
+  c.classList.add('dot'); dg.appendChild(c);
+});
+
+// State colors
+const ATMO = { standby:'#00aacc', awake:'#00ccee', listening:'#ffaa00', speaking:'#00ffcc' };
+
+ipcRenderer.on('set-state', (_, state) => {
+  document.body.className = state;
+  const col = ATMO[state] || '#00aacc';
+  document.getElementById('atmoOut').setAttribute('stop-color', col);
+  if (state === 'speaking') {
+    document.getElementById('cs1').setAttribute('stop-color','#00ddbb');
+  } else if (state === 'listening') {
+    document.getElementById('cs1').setAttribute('stop-color','#ddaa00');
+  } else {
+    document.getElementById('cs1').setAttribute('stop-color','#00bbdd');
+  }
+});
+
+function orbClicked() { ipcRenderer.send('orb-clicked'); }
+
+// ── SELF DESTRUCT EXPLOSION ──
+ipcRenderer.on('self-destruct', () => {
+  explode();
+});
+
+function explode() {
+  // Phase 1: rapid flash and shake
+  document.body.style.animation = 'shake 0.08s linear infinite';
+
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes shake {
+      0%   { transform: translate(0,0); }
+      25%  { transform: translate(-4px, 3px); }
+      50%  { transform: translate(4px, -3px); }
+      75%  { transform: translate(-3px, -4px); }
+      100% { transform: translate(3px, 4px); }
+    }
+    @keyframes coreOverload {
+      0%   { r: 18px; }
+      50%  { r: 35px; }
+      100% { r: 18px; }
+    }
+    @keyframes whiteout {
+      0%   { opacity: 0; }
+      100% { opacity: 1; }
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Make core pulse rapidly
+  const core = document.getElementById('core');
+  core.style.animation = 'coreOverload 0.15s ease-in-out infinite';
+  core.style.fill = '#ff3333';
+
+  // Phase 2: canvas explosion after short delay
+  setTimeout(() => {
+    // Stop shake, go full red
+    document.body.style.animation = '';
+    document.getElementById('wrap').style.display = 'none';
+
+    // Create fullscreen explosion canvas
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = `
+      position:fixed; inset:0; width:100vw; height:100vh;
+      background:transparent; z-index:9999; pointer-events:none;
+    `;
+    canvas.width  = window.innerWidth  || 120;
+    canvas.height = window.innerHeight || 120;
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+
+    // Particle system
+    const cx = (canvas.width  || 120) / 2;
+    const cy = (canvas.height || 120) / 2;
+
+    const COLORS = [
+      '#00d4ff','#00ffcc','#ffffff','#ffaa00','#ff6600',
+      '#ff3333','#00aaff','#ffee00','#ff9900','#aaffee'
+    ];
+
+    const particles = [];
+    const PARTICLE_COUNT = 120;
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const angle  = Math.random() * Math.PI * 2;
+      const speed  = 2 + Math.random() * 8;
+      const size   = 1.5 + Math.random() * 4;
+      const life   = 0.6 + Math.random() * 0.4;
+      const color  = COLORS[Math.floor(Math.random() * COLORS.length)];
+      const type   = Math.random() > 0.6 ? 'shard' : 'spark';
+      particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size, life, maxLife: life,
+        color, type,
+        rot: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.3,
+        gravity: 0.08 + Math.random() * 0.12,
+      });
+    }
+
+    // Shockwave rings
+    const rings = [
+      { r: 5, maxR: 80, opacity: 1, color: '#00d4ff', width: 3 },
+      { r: 5, maxR: 65, opacity: 0.8, color: '#ffffff', width: 1.5 },
+      { r: 5, maxR: 50, opacity: 0.6, color: '#ffaa00', width: 2 },
+    ];
+
+    // Central flash
+    let flashOpacity = 1.0;
+
+    let frame = 0;
+    const MAX_FRAMES = 80;
+
+    function drawFrame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Central white flash
+      if (flashOpacity > 0) {
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 55 * flashOpacity);
+        grad.addColorStop(0, `rgba(255,255,255,${flashOpacity})`);
+        grad.addColorStop(0.3, `rgba(0,212,255,${flashOpacity * 0.8})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 55, 0, Math.PI * 2);
+        ctx.fill();
+        flashOpacity -= 0.06;
+      }
+
+      // Shockwave rings
+      rings.forEach(ring => {
+        if (ring.r < ring.maxR) {
+          const progress = ring.r / ring.maxR;
+          const alpha = ring.opacity * (1 - progress);
+          ctx.beginPath();
+          ctx.arc(cx, cy, ring.r, 0, Math.PI * 2);
+          ctx.strokeStyle = ring.color.replace(')', `,${alpha})`).replace('rgb', 'rgba').replace('#', 'rgba(') ;
+          // Simpler alpha approach:
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = ring.color;
+          ctx.lineWidth = ring.width;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ring.r += 4;
+        }
+      });
+
+      // Particles
+      particles.forEach(p => {
+        if (p.life <= 0) return;
+        p.life -= 0.018;
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.vy += p.gravity;
+        p.vx *= 0.98;
+        p.rot += p.rotSpeed;
+
+        const alpha = Math.max(0, p.life / p.maxLife);
+        ctx.globalAlpha = alpha;
+
+        if (p.type === 'spark') {
+          // Draw spark line
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 3, p.y - p.vy * 3);
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = p.size * 0.5;
+          ctx.stroke();
+          // Dot at tip
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+        } else {
+          // Draw shard (small triangle/rectangle rotated)
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 2.5);
+          ctx.restore();
+        }
+
+        ctx.globalAlpha = 1;
+      });
+
+      frame++;
+      if (frame < MAX_FRAMES) {
+        requestAnimationFrame(drawFrame);
+      } else {
+        // Fade out canvas then done
+        canvas.style.transition = 'opacity 0.4s ease';
+        canvas.style.opacity = '0';
+        setTimeout(() => canvas.remove(), 500);
+      }
+    }
+
+    drawFrame();
+  }, 600);
+}
+</script>
+</body>
+</html>
