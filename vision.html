@@ -199,8 +199,20 @@
     });
   }
 
-  ipcRenderer.on('analyze-now', ()=>analyzeFrame());
-  startCam().then(()=>{ setTimeout(analyzeFrame, 2000); });
+  ipcRenderer.on('analyze-now', () => analyzeFrame());
+
+  // Stop camera stream before window closes — required on macOS
+  // to release the hardware lock so destroy() actually works
+  ipcRenderer.on('stop-camera', () => {
+    try {
+      if (vid.srcObject) {
+        vid.srcObject.getTracks().forEach(t => t.stop());
+        vid.srcObject = null;
+      }
+    } catch(e) {}
+  });
+
+  startCam().then(() => { setTimeout(analyzeFrame, 2000); });
 </script>
 </body>
 </html>

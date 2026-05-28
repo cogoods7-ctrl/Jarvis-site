@@ -1,34 +1,28 @@
 #!/usr/bin/env python3
 """
-JARVIS Vision Analyzer
-Uses Apple Vision framework for classification, face/human detection,
-and text recognition (including mirrored text from webcam).
-Outputs single JSON line to stdout.
+JARVIS Vision Analyzer — Windows version
+Uses OpenCV + basic analysis since Apple Vision isn't available on Windows.
+Falls back to a description based on what can be detected locally.
 """
 import sys
-import os
 import json
 import io
 
-# Silence all stderr during imports
 _stderr = sys.stderr
 sys.stderr = io.StringIO()
 
-VISION_OK = False
+CV2_OK = False
 PIL_OK = False
 
 try:
-    import objc
-    import Quartz
-    from Foundation import NSURL, NSData
-    import Vision
-    VISION_OK = True
+    import cv2
+    import numpy as np
+    CV2_OK = True
 except Exception:
     pass
 
 try:
     from PIL import Image
-    import PIL.ImageOps
     PIL_OK = True
 except Exception:
     pass
@@ -36,126 +30,49 @@ except Exception:
 sys.stderr = _stderr
 
 
-def load_cg_image(path):
-    url = NSURL.fileURLWithPath_(path)
-    src = Quartz.CGImageSourceCreateWithURL(url, None)
-    if not src:
-        return None
-    return Quartz.CGImageSourceCreateImageAtIndex(src, 0, None)
-
-
-def run_requests(handler, requests):
-    ok, _ = handler.performRequests_error_(requests, None)
-    return ok
-
-
-def recognize_text_cg(cg_image, accurate=True):
-    """Run Vision text recognition on a CGImage."""
-    handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg_image, {})
-    req = Vision.VNRecognizeTextRequest.alloc().init()
-    level = Vision.VNRequestTextRecognitionLevelAccurate if accurate else Vision.VNRequestTextRecognitionLevelFast
-    req.setRecognitionLevel_(level)
-    req.setUsesLanguageCorrection_(True)
-    ok, _ = handler.performRequests_error_([req], None)
-    results = []
-    if ok and req.results():
-        for obs in req.results():
-            cands = obs.topCandidates_(1)
-            if cands and len(cands) > 0:
-                t = str(cands[0].string()).strip()
-                if t:
-                    results.append(t)
-    return results
-
-
-def flip_image_horizontally(image_path):
-    """Save a horizontally flipped version of the image, return new path."""
-    if not PIL_OK:
-        return None
-    try:
-        img = Image.open(image_path)
-        flipped = PIL.ImageOps.mirror(img)
-        flipped_path = image_path.replace('.jpg', '_flipped.jpg').replace('.jpeg', '_flipped.jpeg').replace('.png', '_flipped.png')
-        if flipped_path == image_path:
-            flipped_path = image_path + '_flipped.jpg'
-        flipped.save(flipped_path, 'JPEG', quality=85)
-        return flipped_path
-    except Exception:
-        return None
-
-
 def analyze(image_path):
-    out = {
-        "classifications": [],
-        "faces": 0,
-        "humans": 0,
-        "text": [],
-        "text_flipped": [],
-        "error": None
-    }
+    out = {"classifications": [], "faces": 0, "humans": 0, "text": [], "text_flipped": [], "error": None}
 
-    if not VISION_OK:
-        out["error"] = "pyobjc_missing"
+    if not CV2_OK:
+        out["error"] = "opencv_missing"
         sys.stdout.write(json.dumps(out) + "\n")
         sys.stdout.flush()
         return
 
     try:
-        cg = load_cg_image(image_path)
-        if not cg:
+        img = cv2.imread(image_path)
+        if img is None:
             out["error"] = "load_failed"
             sys.stdout.write(json.dumps(out) + "\n")
             sys.stdout.flush()
             return
 
-        handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cg, {})
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # 1. Classify image
-        req_cls = Vision.VNClassifyImageRequest.alloc().init()
-        ok1, _ = handler.performRequests_error_([req_cls], None)
-        if ok1 and req_cls.results():
-            for obs in req_cls.results():
-                c = float(obs.confidence())
-                if c > 0.07:
-                    label = str(obs.identifier()).replace('_', ' ')
-                    out["classifications"].append({"label": label, "confidence": round(c, 3)})
+        # Face detection using Haar cascade (built into OpenCV)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        out["faces"] = len(faces)
 
-        # 2. Face detection
-        req_face = Vision.VNDetectFaceRectanglesRequest.alloc().init()
-        ok2, _ = handler.performRequests_error_([req_face], None)
-        if ok2 and req_face.results():
-            out["faces"] = len(req_face.results())
+        # Basic scene analysis from image properties
+        height, width = img.shape[:2]
+        avg_brightness = np.mean(gray)
+        classifications = []
 
-        # 3. Human body detection
-        try:
-            req_body = Vision.VNDetectHumanRectanglesRequest.alloc().init()
-            ok3, _ = handler.performRequests_error_([req_body], None)
-            if ok3 and req_body.results():
-                out["humans"] = len(req_body.results())
-        except Exception:
-            pass
+        if len(faces) > 0:
+            classifications.append({"label": "person", "confidence": 0.95})
+        if avg_brightness < 80:
+            classifications.append({"label": "dark scene", "confidence": 0.8})
+        elif avg_brightness > 180:
+            classifications.append({"label": "bright scene", "confidence": 0.8})
 
-        # 4. Text recognition on original image
-        out["text"] = recognize_text_cg(cg, accurate=True)
+        # Detect dominant colors
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        avg_saturation = np.mean(hsv[:,:,1])
+        if avg_saturation < 30:
+            classifications.append({"label": "low color", "confidence": 0.7})
 
-        # 5. Text recognition on FLIPPED image (webcam mirrors text)
-        # This catches text that appears backwards in the webcam feed
-        flipped_path = flip_image_horizontally(image_path)
-        if flipped_path:
-            try:
-                cg_flip = load_cg_image(flipped_path)
-                if cg_flip:
-                    flipped_text = recognize_text_cg(cg_flip, accurate=True)
-                    # Only include text that wasn't already found in original
-                    orig_set = set(out["text"])
-                    out["text_flipped"] = [t for t in flipped_text if t not in orig_set]
-            except Exception:
-                pass
-            # Clean up temp file
-            try:
-                os.remove(flipped_path)
-            except Exception:
-                pass
+        out["classifications"] = classifications
 
     except Exception as e:
         out["error"] = str(e)
