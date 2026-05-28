@@ -1,0 +1,14 @@
+{
+  "name": "jarvis-second-brain",
+  "version": "1.0.0",
+  "description": "J.A.R.V.I.S — Neural Voice Interface",
+  "main": "main.js",
+  "scripts": {
+    "start": "bash launch.sh"
+  },
+  "dependencies": {
+    "electron": "^28.0.0"
+  },
+  "author": "hvnbnd",
+  "license": "MIT"
+}
